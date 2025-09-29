@@ -1,0 +1,75 @@
+const express = require("express");
+const app = express();
+const PORT = 3000;
+
+const seats = {
+  "1": { status: "available", lockTime: null },
+  "2": { status: "available", lockTime: null },
+  "3": { status: "available", lockTime: null },
+  "4": { status: "available", lockTime: null },
+  "5": { status: "available", lockTime: null }
+};
+
+const LOCK_TIMEOUT = 60 * 1000; // 60 seconds
+
+// Utility to check if lock expired
+function isLockExpired(seat) {
+  if (seat.status !== "locked") return false;
+  return Date.now() - seat.lockTime > LOCK_TIMEOUT;
+}
+
+// GET all seats
+app.get("/seats", (req, res) => {
+  // Remove expired locks
+  for (const id in seats) {
+    if (seats[id].status === "locked" && isLockExpired(seats[id])) {
+      seats[id].status = "available";
+      seats[id].lockTime = null;
+    }
+  }
+  res.status(200).json(seats);
+});
+
+// POST to lock a seat
+app.post("/lock/:id", (req, res) => {
+  const id = req.params.id;
+  const seat = seats[id];
+
+  if (!seat) return res.status(404).json({ message: "Seat not found" });
+
+  if (seat.status === "booked") {
+    return res.status(400).json({ message: "Seat already booked" });
+  }
+
+  if (seat.status === "locked" && !isLockExpired(seat)) {
+    return res.status(400).json({ message: "Seat is already locked" });
+  }
+
+  seat.status = "locked";
+  seat.lockTime = Date.now();
+
+  return res.status(200).json({
+    message: `Seat ${id} locked successfully. Confirm within 1 minute.`
+  });
+});
+
+// POST to confirm a seat
+app.post("/confirm/:id", (req, res) => {
+  const id = req.params.id;
+  const seat = seats[id];
+
+  if (!seat) return res.status(404).json({ message: "Seat not found" });
+
+  if (seat.status !== "locked" || isLockExpired(seat)) {
+    return res.status(400).json({ message: "Seat is not locked and cannot be booked" });
+  }
+
+  seat.status = "booked";
+  seat.lockTime = null;
+
+  return res.status(200).json({ message: `Seat ${id} booked successfully!` });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+});
